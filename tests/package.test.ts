@@ -15,7 +15,7 @@ describe("package metadata", () => {
     assert.equal(pkg.homepage, "https://github.com/AbhinayYendoti/Superdocs-cli#readme");
     assert.equal(pkg.bugs.url, "https://github.com/AbhinayYendoti/Superdocs-cli/issues");
     assert.equal(pkg.publishConfig.access, "public");
-    assert.equal(pkg.publishConfig.provenance, true);
+    assert.equal(pkg.publishConfig.provenance, undefined);
     assert.ok(pkg.files.includes("DESIGN.md"));
     assert.ok(pkg.keywords.includes("markdown"));
     assert.ok(pkg.keywords.includes("git"));
