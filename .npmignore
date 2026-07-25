@@ -1,0 +1,26 @@
+# Source (published as compiled dist/)
+src/
+tests/
+tsconfig.json
+eslint.config.js
+.prettierrc
+.env
+.env.*
+!.env.example
+
+# Development
+docs/
+examples/
+.github/
+.gitignore
+.npmignore
+*.log
+*.tgz
+dist/**/*.map
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

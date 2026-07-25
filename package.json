@@ -1,0 +1,95 @@
+{
+  "name": "superdocs-cli",
+  "version": "1.0.0",
+  "description": "Edit markdown and text files with SuperDocs AI from your terminal.",
+  "type": "module",
+  "license": "MIT",
+  "author": "SuperDocs <support@superdocs.app> (https://superdocs.app)",
+  "homepage": "https://github.com/AbhinayYendoti/Superdocs-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbhinayYendoti/Superdocs-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AbhinayYendoti/Superdocs-cli/issues"
+  },
+  "keywords": [
+    "superdocs",
+    "superdocs-cli",
+    "cli",
+    "terminal",
+    "ai",
+    "ai-writing",
+    "markdown",
+    "document",
+    "documents",
+    "text",
+    "edit",
+    "editor",
+    "writing",
+    "llm",
+    "git",
+    "automation",
+    "developer-tools"
+  ],
+  "main": "./dist/sdk/index.js",
+  "types": "./dist/sdk/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "DESIGN.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "bin": {
+    "superdocs": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit",
+    "dev": "tsx src/index.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "prepublishOnly": "npm run check && npm run lint && npm run test && npm run build",
+    "start": "node dist/index.js",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.2",
+    "dotenv": "^17.2.3",
+    "ora": "^9.0.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@types/node": "^24.9.1",
+    "eslint": "^9.38.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2"
+  },
+  "overrides": {
+    "minimatch@3.1.5": {
+      "brace-expansion": "5.0.8"
+    }
+  }
+}
