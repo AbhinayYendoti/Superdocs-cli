@@ -1,4 +1,4 @@
-# superdocs
+# superdocs-app-cli
 
 Edit markdown and text files with SuperDocs from your terminal.
 
@@ -9,7 +9,7 @@ SuperDocs is an AI document editing service. This CLI sends a file, stdin, or Gi
 Install:
 
 ```bash
-npm install -g superdocs
+npm install -g superdocs-app-cli
 ```
 
 Authenticate:
