@@ -1,5 +1,5 @@
 {
-  "name": "superdocs-cli",
+  "name": "superdocs",
   "version": "1.0.0",
   "description": "Edit markdown and text files with SuperDocs AI from your terminal.",
   "type": "module",

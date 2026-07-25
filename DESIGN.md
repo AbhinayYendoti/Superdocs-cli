@@ -1,6 +1,6 @@
 # Design
 
-This document explains the shape of `superdocs-cli`: not just what exists, but why it exists this way.
+This document explains the shape of `superdocs`: not just what exists, but why it exists this way.
 
 The goal is simple: a developer should be able to send markdown, text, stdin, or a Git diff to SuperDocs from a terminal, get a useful edit back, and trust that the CLI will not damage local files or leak credentials.
 

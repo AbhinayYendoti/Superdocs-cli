@@ -6,6 +6,7 @@ describe("package metadata", () => {
   it("is configured for public npm consumption", async () => {
     const pkg = JSON.parse(await readFile("package.json", "utf8"));
 
+    assert.equal(pkg.name, "superdocs");
     assert.equal(pkg.bin.superdocs, "dist/index.js");
     assert.equal(pkg.type, "module");
     assert.equal(pkg.main, "./dist/sdk/index.js");
