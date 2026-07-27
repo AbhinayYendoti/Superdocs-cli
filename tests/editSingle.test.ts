@@ -4,10 +4,11 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { Command } from "commander";
 import { executeSingleEditCycle } from "../src/commands/editSingle.js";
 import type { EditCommandOptions } from "../src/types/commands.js";
+import { MissingApiKeyError } from "../src/utils/errors.js";
 import type { ILogger, Spinner } from "../src/utils/logger.js";
 
 const servers: http.Server[] = [];
@@ -109,6 +110,134 @@ describe("executeSingleEditCycle", () => {
       /^GET \/v1\/chat\/cli-proposal-[a-z0-9]+\/stream\?job_id=job_full$/u
     );
   });
+
+  it("cleans up the output lock when authentication config fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "superdocs-edit-"));
+    tempDirs.push(tempDir);
+    const filePath = path.join(tempDir, "proposal.md");
+    const credentialsPath = path.join(tempDir, "credentials.json");
+    const previousCredentialsPath = process.env.SUPERDOCS_CREDENTIALS_PATH;
+    const previousApiKey = process.env.SUPERDOCS_API_KEY;
+
+    await writeFile(filePath, "# Draft\n\nOld content.\n", "utf8");
+    process.env.SUPERDOCS_CREDENTIALS_PATH = credentialsPath;
+    delete process.env.SUPERDOCS_API_KEY;
+
+    try {
+      await assert.rejects(
+        () =>
+          executeSingleEditCycle(
+            filePath,
+            { pollInterval: "2" },
+            fakeCommand(undefined),
+            "Rewrite this",
+            new TestLogger(),
+            new TestSpinner(),
+            new AbortController().signal
+          ),
+        MissingApiKeyError
+      );
+
+      await assertNoLock(filePath);
+    } finally {
+      restoreEnv("SUPERDOCS_CREDENTIALS_PATH", previousCredentialsPath);
+      restoreEnv("SUPERDOCS_API_KEY", previousApiKey);
+    }
+  });
+
+  it("cleans up the output lock when the network request fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "superdocs-edit-"));
+    tempDirs.push(tempDir);
+    const filePath = path.join(tempDir, "proposal.md");
+    await writeFile(filePath, "# Draft\n\nOld content.\n", "utf8");
+
+    await assert.rejects(() =>
+      executeSingleEditCycle(
+        filePath,
+        { pollInterval: "2" },
+        fakeCommand(9),
+        "Rewrite this",
+        new TestLogger(),
+        new TestSpinner(),
+        new AbortController().signal
+      )
+    );
+
+    await assertNoLock(filePath);
+  });
+
+  it("cleans up the output lock when SuperDocs returns an invalid schema", async () => {
+    const server = http.createServer((request, response) => {
+      if (request.method === "POST" && request.url === "/v1/documents/upload-base64") {
+        respondJson(response, {
+          session_id: "session_full",
+          filename: "proposal.md",
+          chunks_count: 1,
+          version_id: "upload_version"
+        });
+        return;
+      }
+
+      if (request.method === "POST" && request.url === "/v1/chat/async") {
+        respondJson(response, {
+          job_id: 123,
+          session_id: "session_full",
+          status: "pending"
+        });
+        return;
+      }
+
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ detail: "not found" }));
+    });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "superdocs-edit-"));
+    tempDirs.push(tempDir);
+    const filePath = path.join(tempDir, "proposal.md");
+    await writeFile(filePath, "# Draft\n\nOld content.\n", "utf8");
+
+    await assert.rejects(() =>
+      executeSingleEditCycle(
+        filePath,
+        { pollInterval: "2" },
+        fakeCommand(addressPort(server)),
+        "Rewrite this",
+        new TestLogger(),
+        new TestSpinner(),
+        new AbortController().signal
+      )
+    );
+
+    await assertNoLock(filePath);
+  });
+
+  it("cleans up the output lock when the edit is aborted", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "superdocs-edit-"));
+    tempDirs.push(tempDir);
+    const filePath = path.join(tempDir, "proposal.md");
+    const abortController = new AbortController();
+    await writeFile(filePath, "# Draft\n\nOld content.\n", "utf8");
+    abortController.abort();
+
+    await assert.rejects(
+      () =>
+        executeSingleEditCycle(
+          filePath,
+          { pollInterval: "2" },
+          fakeCommand(9),
+          "Rewrite this",
+          new TestLogger(),
+          new TestSpinner(),
+          abortController.signal
+        ),
+      /cancelled/u
+    );
+
+    await assertNoLock(filePath);
+  });
 });
 
 function completedJobResult(): unknown {
@@ -131,16 +260,29 @@ function completedJobResult(): unknown {
   };
 }
 
-function fakeCommand(port: number): Command {
+function fakeCommand(port: number | undefined): Command {
   return {
     optsWithGlobals() {
       return {
-        apiKey: "sk_testtesttest",
-        apiUrl: `http://127.0.0.1:${port}`,
+        ...(port === undefined ? {} : { apiKey: "sk_testtesttest" }),
+        apiUrl: `http://127.0.0.1:${port ?? 9}`,
         quiet: true
       };
     }
   } as unknown as Command;
+}
+
+async function assertNoLock(filePath: string): Promise<void> {
+  await assert.rejects(() => stat(`${filePath}.superdocs.lock`), { code: "ENOENT" });
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
 }
 
 function respondJson(response: http.ServerResponse, body: unknown): void {

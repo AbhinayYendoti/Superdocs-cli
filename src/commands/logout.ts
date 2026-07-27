@@ -1,14 +1,13 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { removeEnvValue } from "../config/envFile.js";
-import { getGlobalOptions } from "../utils/command.js";
+import { getCredentialsPath, removeApiKey } from "../config/credentialsStore.js";
 import { createLogger } from "../utils/logger.js";
 
 export function registerLogoutCommand(program: Command): void {
   program
     .command("logout")
-    .description("Remove SUPERDOCS_API_KEY from .env")
-    .summary("Clear saved authentication")
+    .description("Sign out of SuperDocs")
+    .summary("Sign out of SuperDocs")
     .action(function (this: Command) {
       return runLogout(this);
     });
@@ -17,7 +16,7 @@ export function registerLogoutCommand(program: Command): void {
 export function registerAuthLogoutCommand(program: Command): void {
   program
     .command("logout")
-    .description("Remove the saved SuperDocs API key")
+    .description("Sign out of SuperDocs")
     .action(function (this: Command) {
       return runLogout(this);
     });
@@ -25,18 +24,18 @@ export function registerAuthLogoutCommand(program: Command): void {
 
 async function runLogout(command: Command): Promise<void> {
   const logger = createLogger(command);
-  const { envFile = ".env" } = getGlobalOptions(command);
-  const removed = await removeEnvValue("SUPERDOCS_API_KEY", envFile);
+  const credentialsPath = getCredentialsPath();
+  const removed = await removeApiKey();
   delete process.env.SUPERDOCS_API_KEY;
 
   if (logger.json) {
-    logger.writeJson({ ok: true, envFile, removed });
+    logger.writeJson({ ok: true, credentialsPath, removed });
     return;
   }
 
   if (removed) {
-    logger.info(chalk.green(`Removed SUPERDOCS_API_KEY from ${envFile}.`));
+    logger.info(chalk.green("Signed out of SuperDocs. Stored credentials were removed."));
   } else {
-    logger.info(chalk.yellow(`No SUPERDOCS_API_KEY entry was found in ${envFile}.`));
+    logger.info(chalk.yellow("No stored SuperDocs credentials found. You are already signed out."));
   }
 }

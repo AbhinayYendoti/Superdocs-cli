@@ -4,7 +4,7 @@ import { stdin as input, stdout as output } from "node:process";
 export async function promptForText(question: string): Promise<string> {
   if (!input.isTTY) {
     throw new Error(
-      "This command needs interactive input. Re-run it with the required flag instead."
+      "SuperDocs needs an API key to sign in. Run `superdocs auth login` in an interactive terminal, or pass `--api-key`."
     );
   }
 

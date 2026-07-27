@@ -6,9 +6,7 @@ import { redactSecrets } from "./redact.js";
 
 export class MissingApiKeyError extends Error {
   constructor() {
-    super(
-      "Missing SUPERDOCS_API_KEY. Run `superdocs auth login` or add SUPERDOCS_API_KEY to your .env file."
-    );
+    super("No SuperDocs credentials found.\n\nRun:\nsuperdocs auth login");
     this.name = "MissingApiKeyError";
   }
 }
@@ -46,11 +44,11 @@ export function formatFriendlyError(error: unknown): string {
     const trace = error.requestId ? ` [Request ID: ${error.requestId}]` : "";
 
     if (error.status === 401) {
-      return `SuperDocs rejected the API key. Check SUPERDOCS_API_KEY or run \`superdocs auth login\` again.${trace}`;
+      return `SuperDocs could not verify your credentials.${trace}`;
     }
 
     if (error.status === 403) {
-      return `SuperDocs key does not have access to that resource.${trace}`;
+      return `Your SuperDocs account does not have access to this resource.${trace}`;
     }
 
     if (error.status === 404) {
@@ -80,7 +78,7 @@ export function formatFriendlyError(error: unknown): string {
   if (error instanceof ZodError) {
     const issueMsg = error.issues[0]?.message ?? "validation failed";
     if (issueMsg.includes("API key")) {
-      return `Invalid API key: ${issueMsg}`;
+      return "That does not look like a valid SuperDocs API key.";
     }
     if (issueMsg.includes("expected object") && issueMsg.includes("received null")) {
       return "SuperDocs returned an empty or unexpected response.";
@@ -92,7 +90,7 @@ export function formatFriendlyError(error: unknown): string {
     const msg = error.message;
 
     if (isNetworkError(error)) {
-      return "Network error: Could not reach SuperDocs API (connection refused or host unreachable).";
+      return "Could not connect to SuperDocs.";
     }
 
     if (msg.includes("No input received from stdin")) {
@@ -136,12 +134,12 @@ export function formatFriendlyError(error: unknown): string {
 
 export function formatFriendlyHint(error: unknown): string | undefined {
   if (error instanceof MissingApiKeyError) {
-    return "Run `superdocs auth login`, pass `--api-key`, or set SUPERDOCS_API_KEY in your env file.";
+    return undefined;
   }
 
   if (error instanceof SuperDocsError) {
     if (error.status === 401) {
-      return "Verify your key on SuperDocs dashboard, then run `superdocs auth login`.";
+      return "Run `superdocs auth login` to sign in again.";
     }
 
     if (error.status === 413) {
@@ -156,7 +154,7 @@ export function formatFriendlyHint(error: unknown): string | undefined {
   if (error instanceof ZodError) {
     const issueMsg = error.issues[0]?.message ?? "";
     if (issueMsg.includes("API key")) {
-      return "API keys must start with sk_ or lce_ followed by alphanumeric characters, dashes, or underscores.";
+      return "Copy your API key from SuperDocs, then run `superdocs auth login` again.";
     }
     if (issueMsg.includes("expected object") && issueMsg.includes("received null")) {
       return "Try again in a moment. If this repeats, run with --verbose and contact SuperDocs support.";
@@ -165,7 +163,7 @@ export function formatFriendlyHint(error: unknown): string | undefined {
 
   if (error instanceof Error) {
     if (isNetworkError(error)) {
-      return "Check your internet connection or verify the --api-url setting.";
+      return "Check your internet connection, then try again.";
     }
 
     if (error.message.includes("No input received from stdin")) {

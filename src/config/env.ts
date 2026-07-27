@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+import { getCredentialsPath, loadApiKey } from "./credentialsStore.js";
 import { ApiKeySchema } from "../types/api.js";
 import type { GlobalOptions } from "../types/global.js";
 import { MissingApiKeyError } from "../utils/errors.js";
@@ -6,13 +6,20 @@ import { MissingApiKeyError } from "../utils/errors.js";
 export interface AppConfig {
   apiKey: string;
   baseUrl: string;
-  envFile: string;
+  credentialsPath: string;
+  keySource: "flag" | "environment" | "credentials-store";
 }
 
 export function loadConfig(options: GlobalOptions = {}): AppConfig {
-  loadEnv(options);
-  const rawApiKey = options.apiKey ?? process.env.SUPERDOCS_API_KEY;
-  const envFile = options.envFile ?? options.config ?? ".env";
+  const keySource: AppConfig["keySource"] = options.apiKey
+    ? "flag"
+    : process.env.SUPERDOCS_API_KEY
+      ? "environment"
+      : "credentials-store";
+  const rawApiKey =
+    keySource === "credentials-store"
+      ? loadApiKey()
+      : (options.apiKey ?? process.env.SUPERDOCS_API_KEY);
 
   if (!rawApiKey) {
     throw new MissingApiKeyError();
@@ -23,20 +30,12 @@ export function loadConfig(options: GlobalOptions = {}): AppConfig {
     baseUrl: (options.apiUrl ?? process.env.SUPERDOCS_API_BASE_URL ?? "https://api.superdocs.app")
       .trim()
       .replace(/\/+$/u, ""),
-    envFile
+    credentialsPath: getCredentialsPath(),
+    keySource
   };
 }
 
 export function loadOptionalApiKey(options: GlobalOptions = {}): string | undefined {
-  loadEnv(options);
-  const rawApiKey = options.apiKey ?? process.env.SUPERDOCS_API_KEY;
+  const rawApiKey = options.apiKey ?? process.env.SUPERDOCS_API_KEY ?? loadApiKey();
   return rawApiKey ? ApiKeySchema.parse(rawApiKey) : undefined;
-}
-
-function loadEnv(options: GlobalOptions): void {
-  dotenv.config({
-    path: options.envFile ?? options.config ?? ".env",
-    quiet: true,
-    override: false
-  });
 }

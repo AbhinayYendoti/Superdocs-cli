@@ -13,12 +13,12 @@ export function registerConfigCommand(program: Command): void {
   const config = program
     .command("config")
     .description("Manage SuperDocs CLI preferences")
-    .summary("Manage configuration")
+    .summary("Manage CLI preferences")
     .addHelpText(
       "after",
       `
 
-Config keys:
+Preferences:
   default-model     Model tier used by edit: core, turbo, pro, max
   response-mode     Response style: compact, full
   output-format     Default stdin/output format: markdown, txt
@@ -33,8 +33,8 @@ Examples:
 
   config
     .command("get")
-    .description("Print one config value")
-    .argument("<key>", "Config key")
+    .description("Show one saved preference")
+    .argument("<key>", "Preference name")
     .action(function (this: Command, key: string) {
       return runConfigAction(this, async () => {
         const logger = createLogger(this);
@@ -55,9 +55,9 @@ Examples:
 
   config
     .command("set")
-    .description("Save one config value")
-    .argument("<key>", "Config key")
-    .argument("<value>", "Config value")
+    .description("Save one preference")
+    .argument("<key>", "Preference name")
+    .argument("<value>", "Preference value")
     .action(function (this: Command, key: string, value: string) {
       return runConfigAction(this, async () => {
         const logger = createLogger(this);
@@ -73,13 +73,13 @@ Examples:
         }
 
         logger.success(`Set ${entry.key.replace(/_/gu, "-")} to ${entry.value}`);
-        logger.info(chalk.gray(`Config file: ${getUserConfigPath()}`));
+        logger.info(chalk.gray(`Preferences saved at: ${getUserConfigPath()}`));
       });
     });
 
   config
     .command("list")
-    .description("Print all config values")
+    .description("Show saved preferences")
     .action(function (this: Command) {
       return runConfigAction(this, async () => {
         const logger = createLogger(this);
@@ -96,7 +96,7 @@ Examples:
         for (const entry of entries) {
           logger.info(`${entry.key.replace(/_/gu, "-")}=${entry.value ?? ""}`);
         }
-        logger.info(chalk.gray(`Config file: ${getUserConfigPath()}`));
+        logger.info(chalk.gray(`Preferences saved at: ${getUserConfigPath()}`));
       });
     });
 }

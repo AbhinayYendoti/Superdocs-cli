@@ -54,8 +54,9 @@
     "superdocs": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run clean && tsc -p tsconfig.json",
     "check": "tsc --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "tsx src/index.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -74,7 +75,7 @@
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^14.0.2",
-    "dotenv": "^17.2.3",
+    "env-paths": "^4.0.0",
     "ora": "^9.0.0",
     "zod": "^4.1.12"
   },

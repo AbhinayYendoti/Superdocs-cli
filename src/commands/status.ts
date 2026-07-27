@@ -1,15 +1,15 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import { SuperDocsClient } from "../sdk/index.js";
-import { getGlobalOptions, loadConfigForCommand } from "../utils/command.js";
+import { loadConfigForCommand } from "../utils/command.js";
 import { formatFriendlyError, formatFriendlyHint, getExitCode } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 
 export function registerStatusCommand(program: Command): void {
   program
     .command("status")
-    .description("Check SuperDocs API health and API key authentication")
-    .summary("Check API and auth status")
+    .description("Check your SuperDocs connection and sign-in status")
+    .summary("Check connection and sign-in status")
     .addHelpText(
       "after",
       `
@@ -27,7 +27,7 @@ Examples:
 export function registerAuthStatusCommand(program: Command): void {
   program
     .command("status")
-    .description("Check API health and authentication")
+    .description("Check your SuperDocs connection and sign-in status")
     .action(function (this: Command) {
       return runStatus(this);
     });
@@ -35,10 +35,9 @@ export function registerAuthStatusCommand(program: Command): void {
 
 async function runStatus(command: Command): Promise<void> {
   const logger = createLogger(command);
-  const spinner = logger.spinner("Checking SuperDocs status").start();
+  const spinner = logger.spinner("Checking SuperDocs connection").start();
 
   try {
-    const global = getGlobalOptions(command);
     const config = loadConfigForCommand(command);
     const client = new SuperDocsClient({
       ...config,
@@ -48,7 +47,7 @@ async function runStatus(command: Command): Promise<void> {
     const health = await client.health();
     await client.verifyAuthentication();
 
-    spinner.succeed("SuperDocs is reachable and your API key is valid");
+    spinner.succeed("SuperDocs is ready");
 
     if (logger.json) {
       logger.writeJson({
@@ -56,18 +55,16 @@ async function runStatus(command: Command): Promise<void> {
         api: health.status,
         auth: "authenticated",
         apiUrl: config.baseUrl,
-        envFile: config.envFile,
-        keySource: global.apiKey ? "flag" : "environment"
+        credentialsPath: config.credentialsPath,
+        keySource: config.keySource
       });
       return;
     }
 
-    logger.info(`${chalk.bold("API:")} ${health.status}`);
-    logger.info(`${chalk.bold("Auth:")} ${chalk.green("authenticated")}`);
-    logger.info(`${chalk.bold("API URL:")} ${config.baseUrl}`);
-    logger.info(`${chalk.bold("Env file:")} ${config.envFile}`);
+    logger.info(`${chalk.bold("Connection:")} ${health.status}`);
+    logger.info(`${chalk.bold("Authentication:")} ${chalk.green("signed in")}`);
   } catch (error) {
-    spinner.fail("SuperDocs status check failed");
+    spinner.fail("SuperDocs is not ready");
     logger.error(formatFriendlyError(error), formatFriendlyHint(error));
     process.exitCode = getExitCode(error);
   }

@@ -47,8 +47,14 @@ export async function loadUserConfig(filePath = getUserConfigPath()): Promise<Us
     return {};
   }
 
-  const parsed: unknown = JSON.parse(raw);
-  return RawConfigSchema.parse(parsed);
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return RawConfigSchema.parse(parsed);
+  } catch {
+    throw new Error(
+      "SuperDocs could not read your saved preferences. Run `superdocs config list` or update the preference with `superdocs config set`."
+    );
+  }
 }
 
 export function loadUserConfigSync(filePath = getUserConfigPath()): UserConfig {
@@ -57,8 +63,14 @@ export function loadUserConfigSync(filePath = getUserConfigPath()): UserConfig {
     return {};
   }
 
-  const parsed: unknown = JSON.parse(raw);
-  return RawConfigSchema.parse(parsed);
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return RawConfigSchema.parse(parsed);
+  } catch {
+    throw new Error(
+      "SuperDocs could not read your saved preferences. Run `superdocs config list` or update the preference with `superdocs config set`."
+    );
+  }
 }
 
 export async function getUserConfigValue(
@@ -111,14 +123,14 @@ export function normalizeConfigKey(key: string): ConfigKey {
   }
 
   throw new Error(
-    `Unknown config key '${key}'. Valid keys: ${CONFIG_KEYS.map((item) => item.replace(/_/gu, "-")).join(", ")}.`
+    `SuperDocs does not recognize the preference '${key}'. Available preferences: ${CONFIG_KEYS.map((item) => item.replace(/_/gu, "-")).join(", ")}.`
   );
 }
 
 export function parseConfigValue(key: ConfigKey, rawValue: string): UserConfig[ConfigKey] {
   const value = rawValue.trim();
   if (!value) {
-    throw new Error(`Config value for ${key.replace(/_/gu, "-")} cannot be empty.`);
+    throw new Error(`Please provide a value for ${key.replace(/_/gu, "-")}.`);
   }
 
   switch (key) {

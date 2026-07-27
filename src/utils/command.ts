@@ -5,9 +5,7 @@ import type { GlobalOptions } from "../types/global.js";
 import { createLogger } from "./logger.js";
 
 export function getGlobalOptions(command: Command): GlobalOptions {
-  const options = command.optsWithGlobals<GlobalOptions>();
-  const envFile = options.envFile ?? options.config;
-  return envFile ? { ...options, envFile } : options;
+  return command.optsWithGlobals<GlobalOptions>();
 }
 
 export function loadConfigForCommand(command: Command): AppConfig {

@@ -18,12 +18,16 @@ class ProcessCleanupManager {
     if (this.isCleaningUp) return;
     this.isCleaningUp = true;
 
-    for (const handler of Array.from(this.handlers)) {
-      try {
-        await handler();
-      } catch {
-        // Suppress cleanup errors to guarantee remaining handlers run
+    try {
+      for (const handler of Array.from(this.handlers)) {
+        try {
+          await handler();
+        } catch {
+          // Suppress cleanup errors to guarantee remaining handlers run
+        }
       }
+    } finally {
+      this.isCleaningUp = false;
     }
   }
 

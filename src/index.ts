@@ -19,9 +19,12 @@ program
   .version("1.0.0")
   .showHelpAfterError()
   .showSuggestionAfterError()
-  .option("-k, --api-key <key>", "SuperDocs API key. Defaults to SUPERDOCS_API_KEY.")
+  .option("-k, --api-key <key>", "Use a SuperDocs API key for this command.")
   .option("--api-url <url>", "SuperDocs API base URL.", "https://api.superdocs.app")
-  .option("-c, --config <path>", "Credentials env file to read and write.", ".env")
+  .option(
+    "-c, --config <path>",
+    "Deprecated. Credentials are stored in the global SuperDocs directory."
+  )
   .option("--json", "Print machine-readable JSON output.")
   .option("-q, --quiet", "Suppress non-essential output.")
   .option("-v, --verbose", "Print debug logs.")
@@ -31,8 +34,8 @@ program
     `
 
 Core commands:
-  auth login          Save and verify an API key
-  auth status         Check API health and authentication
+  auth login          Sign in to SuperDocs
+  auth status         Check connection and sign-in status
   config list         Show saved CLI preferences
   edit <file>         Edit a local markdown or text file
 
@@ -44,9 +47,10 @@ Examples:
   $ superdocs --json status
 
 Configuration:
-  SUPERDOCS_API_KEY       API key used for Authorization: Bearer <key>
+  SUPERDOCS_API_KEY       Optional credentials override for automation
   SUPERDOCS_API_BASE_URL  Override the API URL for development or self-hosted use
-  superdocs config        Stores non-secret preferences outside the credentials env file`
+  superdocs auth login    Stores credentials in the global SuperDocs directory
+  superdocs config        Stores non-secret preferences outside the credentials file`
   )
   .configureHelp({
     sortSubcommands: true,

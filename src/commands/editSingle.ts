@@ -22,6 +22,7 @@ import {
   writeFileAtomically
 } from "../utils/files.js";
 import { isGitDiffContent } from "../utils/git.js";
+import { processCleanup } from "../utils/cleanup.js";
 import type { ILogger, Spinner } from "../utils/logger.js";
 import { DocumentUploader } from "../services/documentUploader.js";
 import { JobRunner } from "../services/jobRunner.js";
@@ -75,17 +76,24 @@ export async function executeSingleEditCycle(
   }
 
   const outputPath = writeToStdout ? undefined : path.resolve(options.output ?? input.absolutePath);
-  const lock = outputPath && !options.dryRun ? await acquireFileLock(outputPath) : undefined;
   const sessionId =
     options.sessionId ?? createSessionId(isStdinMode ? "stdin" : input.absolutePath);
   const timeoutMs = parseTimeoutMs(options.timeoutSeconds, userConfig.timeout);
   const pollIntervalMs = parsePositiveSeconds(options.pollInterval, "--poll-interval") * 1000;
 
-  const client = createClientForCommand(command, { timeoutMs });
-  const uploader = new DocumentUploader(client);
-  const jobRunner = new JobRunner(client);
+  let lock: Awaited<ReturnType<typeof acquireFileLock>> | undefined;
+  let unregisterLockCleanup: (() => void) | undefined;
 
   try {
+    lock = outputPath && !options.dryRun ? await acquireFileLock(outputPath) : undefined;
+    if (lock) {
+      unregisterLockCleanup = processCleanup.register(() => lock?.release());
+    }
+
+    const client = createClientForCommand(command, { timeoutMs });
+    const uploader = new DocumentUploader(client);
+    const jobRunner = new JobRunner(client);
+
     await uploader.upload(
       input,
       sessionId,
@@ -191,6 +199,7 @@ export async function executeSingleEditCycle(
 
     return exported;
   } finally {
+    unregisterLockCleanup?.();
     await lock?.release();
   }
 }

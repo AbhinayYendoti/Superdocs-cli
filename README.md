@@ -121,7 +121,13 @@ Log out:
 superdocs auth logout
 ```
 
-Credentials are stored in the credentials env file, `.env` by default. Use `--config <path>` to choose another credentials file.
+Credentials are stored in a global `credentials.json` file:
+
+- Windows: `%APPDATA%/SuperDocs/credentials.json`
+- macOS: `~/Library/Application Support/SuperDocs/credentials.json`
+- Linux: `~/.config/SuperDocs/credentials.json`
+
+The CLI also accepts `SUPERDOCS_API_KEY` or `--api-key` as temporary overrides.
 
 ## Configuration
 
@@ -176,14 +182,14 @@ superdocs completion fish > ~/.config/fish/completions/superdocs.fish
 
 | Command                                | Description                         |
 | -------------------------------------- | ----------------------------------- |
-| `superdocs auth login`                 | Save and verify an API key          |
-| `superdocs auth status`                | Check API health and authentication |
-| `superdocs auth logout`                | Remove the saved API key            |
+| `superdocs auth login`                 | Sign in to SuperDocs                |
+| `superdocs auth status`                | Check connection and sign-in status |
+| `superdocs auth logout`                | Sign out of SuperDocs               |
 | `superdocs status`                     | Alias for `auth status`             |
 | `superdocs edit <file>`                | Edit a markdown or text file        |
-| `superdocs config get <key>`           | Print one config value              |
-| `superdocs config set <key> <value>`   | Save one config value               |
-| `superdocs config list`                | Print all config values             |
+| `superdocs config get <key>`           | Show one saved preference           |
+| `superdocs config set <key> <value>`   | Save one preference                 |
+| `superdocs config list`                | Show saved preferences              |
 | `superdocs completion <shell>`         | Print a completion script           |
 | `superdocs completion install <shell>` | Install completion for a shell      |
 

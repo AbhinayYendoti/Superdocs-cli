@@ -11,6 +11,7 @@ import {
   validateExportedTextBytes,
   writeFileAtomically
 } from "../src/utils/files.js";
+import { processCleanup } from "../src/utils/cleanup.js";
 
 describe("files", () => {
   it("rejects empty files before upload", async () => {
@@ -92,6 +93,26 @@ describe("files", () => {
       await utimes(lockPath, stale, stale);
       const lock = await acquireFileLock(filePath);
       await lock.release();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("releases registered locks during process cleanup", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "superdocs-files-"));
+    try {
+      const filePath = path.join(tempDir, "cleanup.md");
+      await writeFile(filePath, "Hello", "utf8");
+      const lock = await acquireFileLock(filePath);
+      const unregister = processCleanup.register(() => lock.release());
+
+      try {
+        await processCleanup.runCleanup();
+        await acquireFileLock(filePath).then((nextLock) => nextLock.release());
+      } finally {
+        unregister();
+        await lock.release();
+      }
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
