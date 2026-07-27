@@ -1,6 +1,6 @@
 {
   "name": "superdocs-app-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Edit markdown and text files with SuperDocs AI from your terminal.",
   "type": "module",
   "license": "MIT",
