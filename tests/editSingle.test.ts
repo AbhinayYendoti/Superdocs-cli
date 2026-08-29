@@ -5,11 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import type { Command } from "commander";
 import { executeSingleEditCycle } from "../src/commands/editSingle.js";
 import type { EditCommandOptions } from "../src/types/commands.js";
 import { MissingApiKeyError } from "../src/utils/errors.js";
-import type { ILogger, Spinner } from "../src/utils/logger.js";
+import { TestLogger, TestSpinner, addressPort, fakeCommand, respondJson } from "./helpers.js";
 
 const servers: http.Server[] = [];
 const tempDirs: string[] = [];
@@ -260,18 +259,6 @@ function completedJobResult(): unknown {
   };
 }
 
-function fakeCommand(port: number | undefined): Command {
-  return {
-    optsWithGlobals() {
-      return {
-        ...(port === undefined ? {} : { apiKey: "sk_testtesttest" }),
-        apiUrl: `http://127.0.0.1:${port ?? 9}`,
-        quiet: true
-      };
-    }
-  } as unknown as Command;
-}
-
 async function assertNoLock(filePath: string): Promise<void> {
   await assert.rejects(() => stat(`${filePath}.superdocs.lock`), { code: "ENOENT" });
 }
@@ -283,62 +270,4 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 
   process.env[key] = value;
-}
-
-function respondJson(response: http.ServerResponse, body: unknown): void {
-  response.writeHead(200, {
-    "Content-Type": "application/json"
-  });
-  response.end(JSON.stringify(body));
-}
-
-function addressPort(server: http.Server): number {
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Test server did not bind to a TCP port.");
-  }
-
-  return address.port;
-}
-
-class TestSpinner implements Spinner {
-  text = "";
-  readonly isSpinning = false;
-
-  start(text?: string): Spinner {
-    if (text) this.text = text;
-    return this;
-  }
-
-  succeed(text?: string): Spinner {
-    if (text) this.text = text;
-    return this;
-  }
-
-  fail(text?: string): Spinner {
-    if (text) this.text = text;
-    return this;
-  }
-
-  stop(): Spinner {
-    return this;
-  }
-}
-
-class TestLogger implements ILogger {
-  readonly quiet = true;
-  readonly verbose = false;
-  readonly json = false;
-
-  spinner(): Spinner {
-    return new TestSpinner();
-  }
-
-  progress(): void {}
-  info(): void {}
-  success(): void {}
-  warn(): void {}
-  debug(): void {}
-  error(): void {}
-  writeJson(): void {}
 }

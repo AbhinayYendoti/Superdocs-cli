@@ -18,6 +18,8 @@ describe("package metadata", () => {
     assert.equal(pkg.publishConfig.access, "public");
     assert.equal(pkg.publishConfig.provenance, undefined);
     assert.ok(pkg.files.includes("DESIGN.md"));
+    // The plugin registry is imported by nothing; it must not ship.
+    assert.ok(pkg.files.includes("!dist/plugins/**"));
     assert.ok(pkg.keywords.includes("markdown"));
     assert.ok(pkg.keywords.includes("git"));
     assert.ok(pkg.engines.node.startsWith(">=20"));
