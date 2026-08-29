@@ -183,7 +183,13 @@ describe("CredentialsStore", () => {
         return;
       }
 
-      await assert.rejects(() => saveApiKey("sk_test"), /symlinked credentials file/u);
+      // Must be a schema-valid key. "sk_test" is too short, so it failed
+      // validation before `saveApiKey` ever reached the symlink guard, which
+      // meant this test never actually exercised the protection it names.
+      await assert.rejects(
+        () => saveApiKey("sk_test.with-hyphen_123"),
+        /symlinked credentials file/u
+      );
       assert.equal(await readFile(targetPath, "utf8"), "{}\n");
     } finally {
       restoreEnv("SUPERDOCS_CREDENTIALS_PATH", previousPath);
