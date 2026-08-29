@@ -1,18 +1,17 @@
-import fsSync, { promises as fs } from "node:fs";
-import os from "node:os";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import {
+  CONFIG_KEYS,
+  type ConfigKey,
+  getUserConfigPath,
+  readConfigFile,
+  readConfigFileSync
+} from "./configPath.js";
 import { ExportFormatSchema, ModelTierSchema, ResponseModeSchema } from "../types/api.js";
 
-export const CONFIG_KEYS = [
-  "default_model",
-  "response_mode",
-  "output_format",
-  "timeout",
-  "verbose"
-] as const;
-
-export type ConfigKey = (typeof CONFIG_KEYS)[number];
+export { CONFIG_KEYS, getUserConfigPath } from "./configPath.js";
+export type { ConfigKey } from "./configPath.js";
 
 const RawConfigSchema = z
   .object({
@@ -30,15 +29,6 @@ export type UserConfig = z.infer<typeof RawConfigSchema>;
 export interface ConfigEntry {
   key: ConfigKey;
   value: string | undefined;
-}
-
-export function getUserConfigPath(): string {
-  const override = process.env.SUPERDOCS_CONFIG_PATH;
-  if (override) {
-    return path.resolve(override);
-  }
-
-  return path.join(getConfigHome(), "superdocs", "config.json");
 }
 
 export async function loadUserConfig(filePath = getUserConfigPath()): Promise<UserConfig> {
@@ -166,42 +156,6 @@ function parseEnumValue<Schema extends z.ZodEnum>(
   return parsed.data;
 }
 
-function getConfigHome(): string {
-  if (process.env.XDG_CONFIG_HOME) {
-    return process.env.XDG_CONFIG_HOME;
-  }
-
-  if (process.platform === "win32" && process.env.APPDATA) {
-    return process.env.APPDATA;
-  }
-
-  return path.join(os.homedir(), ".config");
-}
-
-async function readConfigFile(filePath: string): Promise<string> {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return "";
-    }
-
-    throw error;
-  }
-}
-
-function readConfigFileSync(filePath: string): string {
-  try {
-    return fsSync.readFileSync(filePath, "utf8");
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return "";
-    }
-
-    throw error;
-  }
-}
-
 function parseBoolean(value: string): boolean {
   const normalized = value.toLowerCase();
   if (["1", "true", "yes", "on"].includes(normalized)) {
@@ -224,13 +178,4 @@ function formatConfigValue(value: unknown): string | undefined {
   }
 
   return JSON.stringify(value);
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "ENOENT"
-  );
 }

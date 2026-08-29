@@ -10,6 +10,21 @@ export interface AppConfig {
   keySource: "flag" | "environment" | "credentials-store";
 }
 
+export const DEFAULT_BASE_URL = "https://api.superdocs.app";
+
+/**
+ * Precedence: --api-url, then SUPERDOCS_API_BASE_URL, then the public API.
+ *
+ * `--api-url` must not carry a Commander default. With one, `options.apiUrl` is
+ * always set and the environment variable is silently ignored, which sent
+ * self-hosted traffic to the public API.
+ */
+export function resolveBaseUrl(options: GlobalOptions = {}): string {
+  return (options.apiUrl ?? process.env.SUPERDOCS_API_BASE_URL ?? DEFAULT_BASE_URL)
+    .trim()
+    .replace(/\/+$/u, "");
+}
+
 export function loadConfig(options: GlobalOptions = {}): AppConfig {
   const keySource: AppConfig["keySource"] = options.apiKey
     ? "flag"
@@ -27,9 +42,7 @@ export function loadConfig(options: GlobalOptions = {}): AppConfig {
 
   return {
     apiKey: ApiKeySchema.parse(rawApiKey),
-    baseUrl: (options.apiUrl ?? process.env.SUPERDOCS_API_BASE_URL ?? "https://api.superdocs.app")
-      .trim()
-      .replace(/\/+$/u, ""),
+    baseUrl: resolveBaseUrl(options),
     credentialsPath: getCredentialsPath(),
     keySource
   };

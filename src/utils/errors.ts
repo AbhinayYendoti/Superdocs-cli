@@ -1,13 +1,49 @@
 import chalk from "chalk";
 import { CommanderError } from "commander";
-import { ZodError } from "zod";
 import { ExitCode } from "./exitCodes.js";
 import { redactSecrets } from "./redact.js";
+
+interface ZodErrorLike extends Error {
+  issues: { message?: unknown }[];
+}
+
+/**
+ * Structural check instead of `instanceof ZodError`.
+ *
+ * Importing zod here would put ~140 ms of module loading on the startup path of
+ * every command, including `--version` and `--help`, because `index.ts` needs
+ * this module for its top-level error handler. The shape below is stable across
+ * zod v3 and v4.
+ */
+function isZodError(error: unknown): error is ZodErrorLike {
+  return (
+    error instanceof Error &&
+    error.name === "ZodError" &&
+    Array.isArray((error as { issues?: unknown }).issues)
+  );
+}
+
+function firstZodIssueMessage(error: ZodErrorLike): string {
+  const message = error.issues[0]?.message;
+  return typeof message === "string" ? message : "validation failed";
+}
 
 export class MissingApiKeyError extends Error {
   constructor() {
     super("No SuperDocs credentials found.\n\nRun:\nsuperdocs auth login");
     this.name = "MissingApiKeyError";
+  }
+}
+
+/**
+ * A caller mistake: a bad flag value, a missing required option, or an invalid
+ * combination. Maps to exit code 2 so scripts can tell "you invoked it wrong"
+ * apart from "the service failed".
+ */
+export class UsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UsageError";
   }
 }
 
@@ -75,8 +111,8 @@ export function formatFriendlyError(error: unknown): string {
     return `SuperDocs API error (${error.status}): ${error.message}${trace}`;
   }
 
-  if (error instanceof ZodError) {
-    const issueMsg = error.issues[0]?.message ?? "validation failed";
+  if (isZodError(error)) {
+    const issueMsg = firstZodIssueMessage(error);
     if (issueMsg.includes("API key")) {
       return "That does not look like a valid SuperDocs API key.";
     }
@@ -121,6 +157,10 @@ export function formatFriendlyError(error: unknown): string {
       return msg;
     }
 
+    if (msg.includes("paused this large edit")) {
+      return msg;
+    }
+
     if (isFSEnoentError(error)) {
       const filePath = extractPathFromEnoent(msg);
       return `Could not find input file${filePath ? ` '${filePath}'` : ""}.`;
@@ -151,8 +191,8 @@ export function formatFriendlyHint(error: unknown): string | undefined {
     }
   }
 
-  if (error instanceof ZodError) {
-    const issueMsg = error.issues[0]?.message ?? "";
+  if (isZodError(error)) {
+    const issueMsg = firstZodIssueMessage(error);
     if (issueMsg.includes("API key")) {
       return "Copy your API key from SuperDocs, then run `superdocs auth login` again.";
     }
@@ -193,6 +233,10 @@ export function formatFriendlyHint(error: unknown): string | undefined {
       return "Pass --prompt, or run the command in an interactive terminal so SuperDocs can ask for one.";
     }
 
+    if (error.message.includes("paused this large edit")) {
+      return "Re-run without --no-auto-continue to apply it automatically, or use --approve ask in an interactive terminal to confirm.";
+    }
+
     if (isFSEnoentError(error)) {
       return "Check the file path and verify that the file exists.";
     }
@@ -208,6 +252,10 @@ export function getExitCode(error: unknown): ExitCode {
 
   if (error instanceof MissingApiKeyError) {
     return ExitCode.Config;
+  }
+
+  if (error instanceof UsageError) {
+    return ExitCode.Usage;
   }
 
   if (error instanceof SuperDocsError) {

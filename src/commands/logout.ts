@@ -1,6 +1,5 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { getCredentialsPath, removeApiKey } from "../config/credentialsStore.js";
 import { createLogger } from "../utils/logger.js";
 
 export function registerLogoutCommand(program: Command): void {
@@ -24,6 +23,8 @@ export function registerAuthLogoutCommand(program: Command): void {
 
 async function runLogout(command: Command): Promise<void> {
   const logger = createLogger(command);
+  // Deferred: credentialsStore pulls in zod via the API key schema.
+  const { getCredentialsPath, removeApiKey } = await import("../config/credentialsStore.js");
   const credentialsPath = getCredentialsPath();
   const removed = await removeApiKey();
   delete process.env.SUPERDOCS_API_KEY;

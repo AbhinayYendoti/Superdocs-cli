@@ -1,8 +1,5 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { SuperDocsClient } from "../sdk/index.js";
-import { loadConfigForCommand } from "../utils/command.js";
-import { formatFriendlyError, formatFriendlyHint, getExitCode } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 
 export function registerStatusCommand(program: Command): void {
@@ -35,13 +32,21 @@ export function registerAuthStatusCommand(program: Command): void {
 
 async function runStatus(command: Command): Promise<void> {
   const logger = createLogger(command);
+
+  // Deferred so `--help` and `--version` never pay for zod and the SDK.
+  const [sdk, commandUtils, errors] = await Promise.all([
+    import("../sdk/index.js"),
+    import("../utils/command.js"),
+    import("../utils/errors.js")
+  ]);
+
   const spinner = logger.spinner("Checking SuperDocs connection").start();
 
   try {
-    const config = loadConfigForCommand(command);
-    const client = new SuperDocsClient({
+    const config = commandUtils.loadConfigForCommand(command);
+    const client = new sdk.SuperDocsClient({
       ...config,
-      ...(logger.verbose ? { debug: (message) => logger.debug(message) } : {})
+      ...(logger.verbose ? { debug: (message: string) => logger.debug(message) } : {})
     });
 
     const health = await client.health();
@@ -65,7 +70,7 @@ async function runStatus(command: Command): Promise<void> {
     logger.info(`${chalk.bold("Authentication:")} ${chalk.green("signed in")}`);
   } catch (error) {
     spinner.fail("SuperDocs is not ready");
-    logger.error(formatFriendlyError(error), formatFriendlyHint(error));
-    process.exitCode = getExitCode(error);
+    logger.error(errors.formatFriendlyError(error), errors.formatFriendlyHint(error));
+    process.exitCode = errors.getExitCode(error);
   }
 }

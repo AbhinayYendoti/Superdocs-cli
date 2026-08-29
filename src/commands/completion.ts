@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
-import { CONFIG_KEYS } from "../config/userConfig.js";
+import { CONFIG_KEYS } from "../config/configPath.js";
 import { formatFriendlyError, formatFriendlyHint, getExitCode } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -33,6 +33,7 @@ const EDIT_OPTIONS = [
   "--model-tier",
   "--response-mode",
   "--thinking-depth",
+  "--approve",
   "--timeout-seconds",
   "--poll-interval",
   "--no-auto-continue",
@@ -177,6 +178,10 @@ _superdocs_completion() {
       ;;
     --thinking-depth)
       COMPREPLY=( $(compgen -W "fast balanced deep" -- "\${cur}") )
+      return 0
+      ;;
+    --approve)
+      COMPREPLY=( $(compgen -W "all ask" -- "\${cur}") )
       return 0
       ;;
     get|set)
