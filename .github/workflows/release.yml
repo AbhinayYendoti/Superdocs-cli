@@ -12,55 +12,44 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    # This name must match the Environment field of the npm trusted publisher.
     environment: npm-publish
     permissions:
-      contents: read
-      # Required for npm trusted publishing (OIDC) and provenance attestations.
+      # Needed to create the GitHub Release after a successful publish.
+      contents: write
+      # Required for npm provenance attestations, which work with a token too.
       id-token: write
     steps:
       - uses: actions/checkout@v5
 
-      # `registry-url` is deliberately omitted. It writes an .npmrc containing
-      # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}, and with no token
-      # in the environment that expands to an empty credential, which npm
-      # reports as ENEEDAUTH before it ever attempts OIDC.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-
-      # Node 22 ships npm 10.x. Trusted publishing needs npm >= 11.5.1, so the
-      # bundled version cannot authenticate via OIDC at all.
-      - name: Use an npm that supports trusted publishing
-        run: |
-          npm install -g npm@latest
-          npm --version
+          registry-url: https://registry.npmjs.org
 
       - run: npm ci
 
-      # A manual workflow_dispatch runs every gate but stops short of
-      # publishing, which makes it a safe dry run and a way to diagnose
-      # credential problems without moving a release tag.
-      - name: Report publish preconditions
+      # Fail before the long gates rather than after them: a missing credential
+      # is a five-second answer, not a two-minute one.
+      - name: Check the publish credential is present
+        if: github.ref_type == 'tag'
         env:
-          OIDC_URL_SET: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL != '' }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is not set. Add an npm Automation token:" >&2
+            echo "  gh secret set NPM_TOKEN" >&2
+            exit 1
+          fi
+          echo "publish credential present"
+
+      # A manual workflow_dispatch runs every gate but stops before publishing,
+      # which makes it a safe dry run.
+      - name: Report publish preconditions
         run: |
           echo "ref_type=${{ github.ref_type }} ref_name=${GITHUB_REF_NAME}"
           echo "npm=$(npm --version)  node=$(node --version)"
           echo "registry=$(npm config get registry)"
-          # Presence only. `${VAR:+yes}${VAR:-no}` is wrong: when VAR is set,
-          # the second expansion prints its value. Use an explicit test.
-          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then u=yes; else u=no; fi
-          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then t=yes; else t=no; fi
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: $u"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: $t"
-          for f in ./.npmrc "$HOME/.npmrc" "$NPM_CONFIG_USERCONFIG"; do
-            if [ -n "$f" ] && [ -f "$f" ]; then
-              echo "--- npmrc: $f"
-              sed -E 's/(_authToken[[:space:]]*=[[:space:]]*).*/\1<redacted>/' "$f"
-            fi
-          done
 
       - name: Verify the tag matches package.json
         if: github.ref_type == 'tag'
@@ -77,9 +66,38 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      # No NODE_AUTH_TOKEN: credentials come from the OIDC exchange configured
-      # as a trusted publisher on npmjs.com. Only a tag ref may publish, so a
-      # manual dispatch stops here.
       - name: Publish
         if: github.ref_type == 'tag'
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # A git tag is not a GitHub Release. Publishing to npm alone left the
+      # Releases page showing an older version, so create the Release here,
+      # after the publish has actually succeeded.
+      - name: Extract the changelog section for this version
+        if: github.ref_type == 'tag'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Literal prefix matching, not regex: "## [1.0.2]" contains brackets
+          # that awk would otherwise read as a character class.
+          awk -v v="$version" '
+            BEGIN { target = "## [" v "]" }
+            index($0, target) == 1 { flag = 1; next }
+            flag && index($0, "## [") == 1 { exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "CHANGELOG.md has no section for $version" >&2
+            exit 1
+          fi
+
+      - name: Create the GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "SuperDocs CLI $GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag
