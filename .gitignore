@@ -10,3 +10,6 @@ pnpm-debug.log*
 *.tsbuildinfo
 coverage/
 .nyc_output/
+
+# Packed tarballs from `npm pack`
+*.tgz
