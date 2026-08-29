@@ -18,7 +18,9 @@ PROMPT="${2:?Usage: $0 <file> <prompt>}"
 
 echo "Running superdocs edit in CI mode..."
 
-RESULT=$(superdocs edit "$FILE" --prompt "$PROMPT" --json 2>/dev/null)
+# --json emits newline-delimited JSON, so select the result object rather than
+# assuming a single line.
+RESULT=$(superdocs edit "$FILE" --prompt "$PROMPT" --json 2>/dev/null | jq -c 'select(.ok != null)' | tail -n 1)
 OK=$(echo "$RESULT" | jq -r '.ok')
 
 if [ "$OK" = "true" ]; then

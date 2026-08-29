@@ -89,10 +89,11 @@ Review current Git changes:
 git diff | superdocs edit --prompt "Review these changes and call out risks"
 ```
 
-Inspect Git context directly:
+Include repository context in the request. `--git` adds the repository root, current
+branch, and changed-file list to the instruction sent to SuperDocs:
 
 ```bash
-superdocs edit --git --prompt "Review changed files"
+superdocs edit ./CHANGELOG.md --git --prompt "Summarise the work on this branch"
 ```
 
 ## Authentication
@@ -128,6 +129,9 @@ Credentials are stored in a global `credentials.json` file:
 - Linux: `~/.config/SuperDocs/credentials.json`
 
 The CLI also accepts `SUPERDOCS_API_KEY` or `--api-key` as temporary overrides.
+
+The credentials file is restricted to your account: mode `0600` on macOS and Linux, and an
+explicit ACL on Windows. `superdocs auth login` warns if it cannot apply those permissions.
 
 ## Configuration
 
@@ -203,12 +207,47 @@ superdocs completion fish > ~/.config/fish/completions/superdocs.fish
 | `--model-tier <tier>`      | `core`, `turbo`, `pro`, `max`         |
 | `--response-mode <mode>`   | `compact`, `full`                     |
 | `--thinking-depth <depth>` | `fast`, `balanced`, `deep`            |
-| `-d, --dry-run`            | Show a diff without writing           |
+| `--approve <mode>`         | `all` (unattended) or `ask`           |
+| `--no-auto-continue`       | Stop instead of continuing a pause    |
+| `-d, --dry-run`            | Print a diff without writing          |
 | `-w, --watch`              | Re-edit when the file changes         |
-| `--git`                    | Inspect Git context and changed files |
+| `--git`                    | Send Git context with the instruction |
 | `--timeout-seconds <n>`    | Max wait time                         |
-| `--json`                   | Machine-readable output               |
+| `--json`                   | Newline-delimited JSON output         |
 | `--verbose`                | Debug logs                            |
+
+## Output Streams
+
+`stdout` carries only the payload; everything else goes to `stderr`. That makes redirection
+and piping safe:
+
+```bash
+# The edited document, and nothing else, lands in clean.md
+cat rough.md | superdocs edit --prompt "Clean this up" > clean.md
+
+# A usable patch file; progress and status still print to the terminal
+superdocs edit ./README.md --dry-run --prompt "Fix typos" > fixes.patch
+```
+
+With `--json` the CLI emits newline-delimited JSON - one compact object per line, each
+carrying a `schema_version` - so it can be consumed as a stream:
+
+```bash
+superdocs edit ./doc.md --prompt "Tighten this" --json | jq -c 'select(.ok != null)'
+```
+
+## Approvals
+
+By default `superdocs edit` applies changes unattended, which is what CI needs. To confirm
+before SuperDocs continues a large edit, run it interactively:
+
+```bash
+superdocs edit ./spec.md --approve ask --prompt "Restructure this document"
+```
+
+`--no-auto-continue` stops the edit at a pause instead of continuing. In a non-interactive
+terminal the paused job is cancelled and the command exits with an explanatory error rather
+than hanging or silently applying the change.
 
 ## Development
 

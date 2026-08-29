@@ -62,10 +62,13 @@ git diff main...feature-branch | superdocs edit --prompt "Write a PR description
 git diff --staged | superdocs edit --prompt "Review this code for bugs and suggest improvements"
 ```
 
-### Inspect Git context
+### Include Git context with an edit
+
+`--git` is a modifier, not a standalone mode: it adds the repository root, current branch,
+and changed-file list to the instruction. It still needs a file or stdin.
 
 ```bash
-superdocs edit --git --prompt "What files have changed in this repository?"
+superdocs edit ./CHANGELOG.md --git --prompt "Summarise what changed on this branch"
 ```
 
 ## Dry Run
@@ -122,8 +125,12 @@ echo "$RESULT" | jq '.ok'
 ### Combine with dry run
 
 ```bash
-superdocs edit ./doc.md --dry-run --json --prompt "Simplify language" | jq '.diff'
+superdocs edit ./doc.md --dry-run --json --prompt "Simplify language" | jq -r 'select(.diff).diff'
 ```
+
+`--json` emits newline-delimited JSON, so pair it with `jq`'s line-by-line reading (the
+default) and `select` the object you want. Adding `--verbose` interleaves progress events
+into the same stream.
 
 ## Shell Completions
 
