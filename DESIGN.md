@@ -111,7 +111,10 @@ Current safeguards:
 
 - API keys are stored separately from non-secret config
 - credential files reject symlinks
-- credential files are written with owner-only permissions where supported
+- credential files are written with owner-only permissions: POSIX mode `0600`, and on
+  Windows an explicit `icacls` ACL that drops inheritance and grants only the current
+  account (mode bits alone are a no-op there)
+- `superdocs auth login` warns when it cannot restrict those permissions
 - API keys and bearer tokens are redacted from errors/logs
 - empty files fail before upload
 - binary and invalid UTF-8 files fail before upload
@@ -137,29 +140,47 @@ A synchronous API call would be simpler, but fragile for large documents. Async 
 
 Streaming gives better UX, but not every network path supports SSE reliably. Polling fallback makes the CLI resilient without requiring the user to know what failed.
 
-### Store credentials in OS keychain vs env file
+### Store credentials in OS keychain vs a permission-restricted file
 
-An OS keychain is a good future direction, but cross-platform keychain support adds dependencies and operational complexity. For v1, credentials live in a chosen env file with symlink protection and restrictive permissions.
+An OS keychain is a good future direction, but cross-platform keychain support adds dependencies and operational complexity. For v1, credentials live in a JSON file in the platform's SuperDocs directory, protected by symlink rejection and per-platform permission hardening.
+
+The important caveat: POSIX mode bits do nothing on Windows. Relying on `chmod(0o600)` alone there left the API key readable by anything running under the account. The CLI now applies an explicit ACL via `icacls` on win32 and reports when hardening fails, so the safety claim holds on every supported platform rather than only on Unix.
 
 ### Publish source maps vs smaller package
 
 Source maps help debugging, but they increase package size and expose source layout. For public npm consumption, the package ships compiled JS and declarations only.
 
+## Stream Contract
+
+`stdout` carries only the payload: the edited document when writing to stdout, the unified diff in `--dry-run`, the generated script from `superdocs completion`, and the JSON stream under `--json`. Everything else - progress, spinners, session and job identifiers, Git context notes, warnings, and errors - goes to `stderr`.
+
+This is what makes the piping examples in the README actually safe. Mixing status text into stdout corrupted redirected output, most visibly with `--git`, where repository details were printed ahead of the document.
+
+`--json` emits newline-delimited JSON: one compact object per line, each stamped with `schema_version`. Pretty-printed multi-object output could not be parsed as a stream by `jq` or any line-oriented reader.
+
 ## Benchmarks
 
 Measured on Windows with Node.js v22.15.1 and npm 10+, using the built `dist/` output.
 
-| Metric                |                Value | Command / Source                                                     |
-| --------------------- | -------------------: | -------------------------------------------------------------------- |
-| Startup time          |               608 ms | `Measure-Command { node dist/index.js --version }`                   |
-| Peak memory           |              59.7 MB | sampled `node dist/index.js --api-url http://127.0.0.1:9 ... status` |
-| Build time            |               5.63 s | `Measure-Command { npm run build }`                                  |
-| Test count            |             43 tests | `npm test`                                                           |
-| Test result           | 42 passed, 1 skipped | symlink test skipped on this Windows environment                     |
-| Packed package size   |              43.0 kB | `npm pack --dry-run --json`                                          |
-| Unpacked package size |             181.7 kB | `npm pack --dry-run --json`                                          |
-| Published file count  |             79 files | `npm pack --dry-run --json`                                          |
-| Audit result          |    0 vulnerabilities | `npm audit --audit-level=moderate`                                   |
+| Metric                |                 Value | Command / Source                                                     |
+| --------------------- | --------------------: | -------------------------------------------------------------------- |
+| Startup time          |      ~100 ms overhead | over bare `node`; zod and ora are no longer eagerly loaded           |
+| Peak memory           |               59.7 MB | sampled `node dist/index.js --api-url http://127.0.0.1:9 ... status` |
+| Build time            |                5.63 s | `Measure-Command { npm run build }`                                  |
+| Test count            |             148 tests | `npm test`                                                           |
+| Test result           | 147 passed, 1 skipped | symlink test skipped on this Windows environment                     |
+| Packed package size   |               43.0 kB | `npm pack --dry-run --json`                                          |
+| Unpacked package size |              181.7 kB | `npm pack --dry-run --json`                                          |
+| Published file count  |              79 files | `npm pack --dry-run --json`                                          |
+| Audit result          |     0 vulnerabilities | `npm audit --audit-level=moderate`                                   |
+
+Test layers:
+
+- **unit** - pure functions and schemas
+- **integration** - `executeSingleEditCycle` against an in-process mock API
+- **end-to-end** - the built `dist/index.js` spawned as a subprocess against a full mock API,
+  which is the only layer that can catch wiring bugs such as an option default shadowing an
+  environment variable
 
 These numbers are not meant to be universal. They are a baseline for this machine and should be re-measured before major releases.
 
@@ -167,10 +188,11 @@ These numbers are not meant to be universal. They are a baseline for this machin
 
 Near-term:
 
-- add integration tests against a mock SuperDocs API server
 - add explicit `--max-bytes` guidance if API limits become public
 - improve watch mode reporting for repeated failures
 - document API request/response contracts for SDK consumers
+- multi-file and glob targets with bounded concurrency
+- per-project configuration and named profiles
 
 Medium-term:
 
