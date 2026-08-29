@@ -12,20 +12,38 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
+    # This name must match the Environment field of the npm trusted publisher.
     environment: npm-publish
     permissions:
       contents: read
-      # Required for npm provenance attestations.
+      # Required for npm trusted publishing (OIDC) and provenance attestations.
       id-token: write
     steps:
       - uses: actions/checkout@v5
+
+      # `registry-url` is deliberately omitted. It writes an .npmrc containing
+      # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}, and with no token
+      # in the environment that expands to an empty credential, which npm
+      # reports as ENEEDAUTH before it ever attempts OIDC.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-          registry-url: https://registry.npmjs.org
+
+      # Node 22 ships npm 10.x. Trusted publishing needs npm >= 11.5.1, so the
+      # bundled version cannot authenticate via OIDC at all.
+      - name: Use an npm that supports trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - run: npm ci
+
+      - name: Refuse to publish from a non-tag ref
+        if: github.ref_type != 'tag'
+        run: |
+          echo "Release must be triggered by a v* tag, got ${GITHUB_REF}." >&2
+          exit 1
 
       - name: Verify the tag matches package.json
         run: |
@@ -41,7 +59,7 @@ jobs:
       - run: npm test
       - run: npm run build
 
+      # No NODE_AUTH_TOKEN: credentials come from the OIDC exchange configured
+      # as a trusted publisher on npmjs.com.
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
