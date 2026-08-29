@@ -1,8 +1,13 @@
+import { execFile } from "node:child_process";
 import fsSync, { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import envPaths from "env-paths";
 import { z } from "zod";
 import { ApiKeySchema } from "../types/api.js";
+
+const execFileAsync = promisify(execFile);
 
 const APP_NAME = "SuperDocs";
 const CREDENTIALS_FILE = "credentials.json";
@@ -52,7 +57,60 @@ export async function saveApiKey(apiKey: string): Promise<void> {
       mode: 0o600
     }
   );
-  await fs.chmod(credentialsPath, 0o600).catch(() => {});
+  await restrictToCurrentUser(credentialsPath);
+}
+
+/**
+ * Restricts the credentials file to the current user.
+ *
+ * POSIX mode bits are a no-op on Windows, so `chmod(0o600)` alone left the API
+ * key readable by anything running under the user's account and by anything
+ * inheriting the parent directory's ACL. On win32 we drop inherited ACEs and
+ * grant full control to the current account only.
+ *
+ * Returns false when hardening could not be applied, so callers may warn.
+ */
+export async function restrictToCurrentUser(filePath: string): Promise<boolean> {
+  if (process.platform !== "win32") {
+    try {
+      await fs.chmod(filePath, 0o600);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const account = currentWindowsAccount();
+  if (!account) {
+    return false;
+  }
+
+  try {
+    await execFileAsync("icacls", [filePath, "/inheritance:r", "/grant:r", `${account}:F`], {
+      windowsHide: true
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function currentWindowsAccount(): string | undefined {
+  const domain = process.env.USERDOMAIN;
+  const user = process.env.USERNAME ?? safeUserInfoName();
+  if (!user) {
+    return undefined;
+  }
+
+  return domain ? `${domain}\\${user}` : user;
+}
+
+function safeUserInfoName(): string | undefined {
+  try {
+    return os.userInfo().username;
+  } catch {
+    return undefined;
+  }
 }
 
 export function loadApiKey(): string | undefined {

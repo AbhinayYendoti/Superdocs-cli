@@ -1,13 +1,12 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import {
-  getUserConfigPath,
-  getUserConfigValue,
-  listUserConfig,
-  setUserConfigValue
-} from "../config/userConfig.js";
-import { formatFriendlyError, formatFriendlyHint, getExitCode } from "../utils/errors.js";
+import { getUserConfigPath } from "../config/configPath.js";
 import { createLogger } from "../utils/logger.js";
+
+/** Deferred so the zod-backed schema layer stays off the startup path. */
+function loadUserConfigModule(): Promise<typeof import("../config/userConfig.js")> {
+  return import("../config/userConfig.js");
+}
 
 export function registerConfigCommand(program: Command): void {
   const config = program
@@ -38,6 +37,7 @@ Examples:
     .action(function (this: Command, key: string) {
       return runConfigAction(this, async () => {
         const logger = createLogger(this);
+        const { getUserConfigValue } = await loadUserConfigModule();
         const entry = await getUserConfigValue(key);
         if (logger.json) {
           logger.writeJson({ ok: true, key: entry.key, value: entry.value ?? null });
@@ -61,6 +61,7 @@ Examples:
     .action(function (this: Command, key: string, value: string) {
       return runConfigAction(this, async () => {
         const logger = createLogger(this);
+        const { setUserConfigValue } = await loadUserConfigModule();
         const entry = await setUserConfigValue(key, value);
         if (logger.json) {
           logger.writeJson({
@@ -83,6 +84,7 @@ Examples:
     .action(function (this: Command) {
       return runConfigAction(this, async () => {
         const logger = createLogger(this);
+        const { listUserConfig } = await loadUserConfigModule();
         const entries = await listUserConfig();
         if (logger.json) {
           logger.writeJson({
@@ -106,6 +108,8 @@ async function runConfigAction(command: Command, action: () => Promise<void>): P
   try {
     await action();
   } catch (error) {
+    const { formatFriendlyError, formatFriendlyHint, getExitCode } =
+      await import("../utils/errors.js");
     logger.error(formatFriendlyError(error), formatFriendlyHint(error));
     process.exitCode = getExitCode(error);
   }

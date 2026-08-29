@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
 import { registerCommands } from "./commands/index.js";
@@ -11,16 +14,43 @@ import {
 import { ExitCode } from "./utils/exitCodes.js";
 import { createLogger } from "./utils/logger.js";
 
+/**
+ * Read the shipped package version at runtime rather than hardcoding it.
+ * A literal here silently drifts on every release bump.
+ */
+function resolveVersion(): string {
+  try {
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    const raw = readFileSync(path.join(moduleDir, "..", "package.json"), "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null) {
+      const version = (parsed as { version?: unknown }).version;
+      if (typeof version === "string" && version.length > 0) {
+        return version;
+      }
+    }
+  } catch {
+    // Fall through to the sentinel below.
+  }
+
+  return "0.0.0-unknown";
+}
+
 const program = new Command();
 
 program
   .name("superdocs")
   .description("Official command line interface for SuperDocs")
-  .version("1.0.0")
+  .version(resolveVersion())
   .showHelpAfterError()
   .showSuggestionAfterError()
   .option("-k, --api-key <key>", "Use a SuperDocs API key for this command.")
-  .option("--api-url <url>", "SuperDocs API base URL.", "https://api.superdocs.app")
+  // No Commander default here on purpose: a default would always populate
+  // `options.apiUrl` and permanently shadow SUPERDOCS_API_BASE_URL.
+  .option(
+    "--api-url <url>",
+    "SuperDocs API base URL. Defaults to SUPERDOCS_API_BASE_URL, then https://api.superdocs.app."
+  )
   .option(
     "-c, --config <path>",
     "Deprecated. Credentials are stored in the global SuperDocs directory."
