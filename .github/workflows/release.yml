@@ -39,13 +39,28 @@ jobs:
 
       - run: npm ci
 
-      - name: Refuse to publish from a non-tag ref
-        if: github.ref_type != 'tag'
+      # A manual workflow_dispatch runs every gate but stops short of
+      # publishing, which makes it a safe dry run and a way to diagnose
+      # credential problems without moving a release tag.
+      - name: Report publish preconditions
+        env:
+          OIDC_URL_SET: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL != '' }}
         run: |
-          echo "Release must be triggered by a v* tag, got ${GITHUB_REF}." >&2
-          exit 1
+          echo "ref_type=${{ github.ref_type }} ref_name=${GITHUB_REF_NAME}"
+          echo "npm=$(npm --version)  node=$(node --version)"
+          echo "registry=$(npm config get registry)"
+          # Presence only. These are credentials; never echo the values.
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}${ACTIONS_ID_TOKEN_REQUEST_URL:-no}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-no}"
+          for f in ./.npmrc "$HOME/.npmrc" "$NPM_CONFIG_USERCONFIG"; do
+            if [ -n "$f" ] && [ -f "$f" ]; then
+              echo "--- npmrc: $f"
+              sed -E 's/(_authToken[[:space:]]*=[[:space:]]*).*/\1<redacted>/' "$f"
+            fi
+          done
 
       - name: Verify the tag matches package.json
+        if: github.ref_type == 'tag'
         run: |
           tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p "require('./package.json').version")"
@@ -60,6 +75,8 @@ jobs:
       - run: npm run build
 
       # No NODE_AUTH_TOKEN: credentials come from the OIDC exchange configured
-      # as a trusted publisher on npmjs.com.
+      # as a trusted publisher on npmjs.com. Only a tag ref may publish, so a
+      # manual dispatch stops here.
       - name: Publish
+        if: github.ref_type == 'tag'
         run: npm publish --provenance --access public
