@@ -795,10 +795,10 @@ describe("e2e: watch mode", () => {
     const home = await makeHome();
     const doc = await withDoc(home);
 
-    const child = spawnCli(["edit", doc, "-p", "Tighten", "--watch", "--watch-debounce", "50"], {
-      home,
-      env: authEnv(api)
-    });
+    const child = spawnCli(
+      ["edit", doc, "-p", "Tighten", "--watch", "--watch-debounce", "50", "--poll-interval", "1"],
+      { home, env: authEnv(api) }
+    );
 
     let stderr = "";
     child.stderr.setEncoding("utf8");
@@ -878,7 +878,19 @@ function continueBody(api: MockServer): Record<string, unknown> | undefined {
   return api.requests.find((entry) => entry.url.endsWith("/continue"))?.body;
 }
 
-async function waitFor(predicate: () => Promise<boolean>, timeoutMs: number): Promise<void> {
+/**
+ * Watch mode drives two full edit cycles, each spawning work against the mock
+ * API. Windows runners are markedly slower than Linux here, so the budget is
+ * generous; the failure message carries the child's stderr so a CI timeout is
+ * diagnosable without a rerun.
+ */
+const WATCH_TIMEOUT_MS = 60_000;
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  timeoutMs: number,
+  describe?: () => string
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -890,5 +902,5 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs: number): Pr
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Condition not met within ${timeoutMs} ms.`);
+  throw new Error(`Condition not met within ${timeoutMs} ms.${describe ? ` ${describe()}` : ""}`);
 }
