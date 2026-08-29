@@ -801,17 +801,46 @@ describe("e2e: watch mode", () => {
     );
 
     let stderr = "";
+    let stdout = "";
+    let exited: { code: number | null; signal: NodeJS.Signals | null } | undefined;
     child.stderr.setEncoding("utf8");
+    child.stdout.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
+    child.stdout.on("data", (chunk: string) => (stdout += chunk));
+    child.on("close", (code, signal) => (exited = { code, signal }));
 
     try {
+      const diagnose = () => `\n--- child stderr ---\n${stderr}\n--- child stdout ---\n${stdout}`;
+
+      // Watch mode should stay alive for the whole test. If it exits, say so
+      // immediately with its output instead of burning the full timeout.
+      const diedEarly = () =>
+        exited
+          ? `watch process exited early (code ${String(exited.code)}, signal ${String(exited.signal)}).`
+          : undefined;
+
       // Wait for the watcher to announce itself, not just for the first write:
       // modifying mid-cycle would race the initial pass.
-      await waitFor(() => Promise.resolve(stderr.includes("[watch] Watching")), 25_000);
-      await waitFor(async () => (await readFile(doc, "utf8")).includes("Pass 1"), 25_000);
+      await waitFor(
+        () => Promise.resolve(stderr.includes("[watch] Watching")),
+        WATCH_TIMEOUT_MS,
+        () => `watcher never started.${diagnose()}`,
+        diedEarly
+      );
+      await waitFor(
+        async () => (await readFile(doc, "utf8")).includes("Pass 1"),
+        WATCH_TIMEOUT_MS,
+        () => `initial edit never landed.${diagnose()}`,
+        diedEarly
+      );
 
       await writeFile(doc, "# Original\n\nEdited by hand.\n", "utf8");
-      await waitFor(async () => (await readFile(doc, "utf8")).includes("Pass 2"), 25_000);
+      await waitFor(
+        async () => (await readFile(doc, "utf8")).includes("Pass 2"),
+        WATCH_TIMEOUT_MS,
+        () => `change was never picked up.${diagnose()}`,
+        diedEarly
+      );
     } finally {
       child.kill();
     }
@@ -889,10 +918,17 @@ const WATCH_TIMEOUT_MS = 60_000;
 async function waitFor(
   predicate: () => Promise<boolean>,
   timeoutMs: number,
-  describe?: () => string
+  describe?: () => string,
+  /** Returns a reason to give up immediately, e.g. the child process died. */
+  abortIf?: () => string | undefined
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    const abortReason = abortIf?.();
+    if (abortReason) {
+      throw new Error(`${abortReason}${describe ? ` ${describe()}` : ""}`);
+    }
+
     try {
       if (await predicate()) {
         return;
