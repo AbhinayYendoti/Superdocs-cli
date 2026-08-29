@@ -49,9 +49,12 @@ jobs:
           echo "ref_type=${{ github.ref_type }} ref_name=${GITHUB_REF_NAME}"
           echo "npm=$(npm --version)  node=$(node --version)"
           echo "registry=$(npm config get registry)"
-          # Presence only. These are credentials; never echo the values.
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}${ACTIONS_ID_TOKEN_REQUEST_URL:-no}"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-no}"
+          # Presence only. `${VAR:+yes}${VAR:-no}` is wrong: when VAR is set,
+          # the second expansion prints its value. Use an explicit test.
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then u=yes; else u=no; fi
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then t=yes; else t=no; fi
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: $u"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: $t"
           for f in ./.npmrc "$HOME/.npmrc" "$NPM_CONFIG_USERCONFIG"; do
             if [ -n "$f" ] && [ -f "$f" ]; then
               echo "--- npmrc: $f"
