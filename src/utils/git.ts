@@ -14,8 +14,12 @@ export class GitError extends Error {
 export interface GitRepoInfo {
   isGitRepo: boolean;
   rootPath?: string;
+  branch?: string;
   changedFiles: string[];
 }
+
+/** Keeps the injected context bounded so a large working tree cannot dominate the prompt. */
+const MAX_CONTEXT_FILES = 50;
 
 /**
  * Checks if the git executable is installed and available in PATH.
@@ -74,6 +78,21 @@ export async function getGitChangedFiles(cwd?: string): Promise<string[]> {
 }
 
 /**
+ * Returns the current branch name, or undefined when detached or unavailable.
+ */
+export async function getGitBranch(cwd?: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: cwd ?? process.cwd()
+    });
+    const branch = stdout.trim();
+    return branch && branch !== "HEAD" ? branch : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Detects if a text string represents a unified git diff snippet.
  */
 export function isGitDiffContent(content: string): boolean {
@@ -98,13 +117,50 @@ export async function inspectGitContext(cwd?: string): Promise<GitRepoInfo> {
 
   try {
     const rootPath = await getGitRepositoryRoot(cwd);
-    const changedFiles = await getGitChangedFiles(cwd);
+    const [changedFiles, branch] = await Promise.all([getGitChangedFiles(cwd), getGitBranch(cwd)]);
     return {
       isGitRepo: true,
       rootPath,
+      ...(branch ? { branch } : {}),
       changedFiles
     };
   } catch {
     return { isGitRepo: false, changedFiles: [] };
   }
+}
+
+/**
+ * Renders repository state as a prompt preamble.
+ *
+ * Without this, `--git` only printed repo details to the terminal and threw them
+ * away, so the model never saw the context the flag advertises.
+ */
+export function formatGitContext(info: GitRepoInfo): string | undefined {
+  if (!info.isGitRepo) {
+    return undefined;
+  }
+
+  const lines = ["Git context for this request:"];
+  if (info.rootPath) {
+    lines.push(`- Repository root: ${info.rootPath}`);
+  }
+  if (info.branch) {
+    lines.push(`- Current branch: ${info.branch}`);
+  }
+
+  if (info.changedFiles.length === 0) {
+    lines.push("- Working tree is clean.");
+  } else {
+    const shown = info.changedFiles.slice(0, MAX_CONTEXT_FILES);
+    const remaining = info.changedFiles.length - shown.length;
+    lines.push(`- Changed files (${info.changedFiles.length}):`);
+    for (const file of shown) {
+      lines.push(`  - ${file}`);
+    }
+    if (remaining > 0) {
+      lines.push(`  - ...and ${remaining} more`);
+    }
+  }
+
+  return lines.join("\n");
 }

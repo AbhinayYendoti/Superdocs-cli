@@ -17,6 +17,11 @@ export interface JobRunnerOptions {
   signal?: AbortSignal | undefined;
   onProgress?: ((event: JobProgressEvent) => void) | undefined;
   onContinuePrompt?: ((message: string) => void) | undefined;
+  /**
+   * Asked when SuperDocs pauses and auto-continue is off. Returning false
+   * cancels the remote job instead of leaving it running server-side.
+   */
+  onApprovalRequired?: ((message: string) => Promise<boolean>) | undefined;
 }
 
 export class JobRunner {
@@ -184,15 +189,43 @@ export class JobRunner {
     const promptMsg = "SuperDocs paused this large edit and needs confirmation to continue.";
     options.onContinuePrompt?.(promptMsg);
 
-    if (autoContinue && options.sessionId) {
+    const sessionId = options.sessionId;
+    if (!sessionId) {
+      throw new Error(promptMsg);
+    }
+
+    if (autoContinue) {
       options.onProgress?.({
         type: "status_change",
         message: "Auto-continuing paused edit..."
       });
-      await this.client.continueChat(options.sessionId, jobId, true);
-    } else {
+      await this.client.continueChat(sessionId, jobId, true);
+      return;
+    }
+
+    // No approver means the command is non-interactive. Stop the remote job
+    // rather than leaving it running server-side after we abandon it.
+    if (!options.onApprovalRequired) {
+      await this.stopPausedJob(sessionId, jobId);
       throw new Error(promptMsg);
     }
+
+    const approved = await options.onApprovalRequired(promptMsg);
+    if (!approved) {
+      await this.stopPausedJob(sessionId, jobId);
+      throw new Error("Edit stopped: continuation was declined.");
+    }
+
+    options.onProgress?.({
+      type: "status_change",
+      message: "Continuing paused edit..."
+    });
+    await this.client.continueChat(sessionId, jobId, true);
+  }
+
+  private async stopPausedJob(sessionId: string, jobId: string): Promise<void> {
+    await this.client.continueChat(sessionId, jobId, false).catch(() => {});
+    await this.client.cancelJob(jobId).catch(() => {});
   }
 
   private resolveFinalJobStatus(job: JobResponse): ChatResponse {
