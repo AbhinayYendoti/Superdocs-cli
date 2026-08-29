@@ -15,7 +15,8 @@ export async function runWatchMode(
   command: Command,
   prompt: string,
   logger: ILogger,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  gitContext?: string
 ): Promise<void> {
   const debounceMs = parsePositiveMs(options.watchDebounce ?? "300", "--watch-debounce");
   const absoluteInputPath = path.resolve(filePath);
@@ -23,42 +24,21 @@ export async function runWatchMode(
   let lastProcessedHash: string | null = null;
   let isEditing = false;
   let pendingChange = false;
+  let ready = false;
 
-  logger.info(chalk.blue(`[watch] Starting initial edit for ${filePath}...`));
-
-  // Initial edit pass
-  const initialSpinner = logger.spinner("Preparing edit");
-  try {
-    const exportedBytes = await executeSingleEditCycle(
-      filePath,
-      options,
-      command,
-      prompt,
-      logger,
-      initialSpinner,
-      signal
-    );
+  const recordProcessed = async (exportedBytes: Uint8Array | undefined): Promise<void> => {
     if (exportedBytes) {
       lastProcessedHash = computeBufferHash(exportedBytes);
-    } else {
-      const writtenBytes = await fs.readFile(outputPath);
-      lastProcessedHash = computeBufferHash(writtenBytes);
+      return;
     }
-  } catch (error) {
-    if (initialSpinner.isSpinning) {
-      initialSpinner.fail("Initial edit failed");
-    }
-    logger.error(formatFriendlyError(error), formatFriendlyHint(error));
-  }
+    const writtenBytes = await fs.readFile(outputPath);
+    lastProcessedHash = computeBufferHash(writtenBytes);
+  };
 
-  logger.info(
-    chalk.blue(
-      `\n[watch] Watching ${filePath} for changes (debounce: ${debounceMs}ms)... (Press Ctrl+C to exit)`
-    )
-  );
-
-  const processChange = async () => {
-    if (isEditing || signal?.aborted) {
+  const processChange = async (): Promise<void> => {
+    // Queue anything that arrives before the first pass finishes or while an
+    // edit is in flight; the `finally` block drains it.
+    if (!ready || isEditing || signal?.aborted) {
       pendingChange = true;
       return;
     }
@@ -73,9 +53,7 @@ export async function runWatchMode(
 
       isEditing = true;
       pendingChange = false;
-      logger.info(
-        chalk.yellow(`\n[watch] Change detected in ${filePath}. Sending to SuperDocs...`)
-      );
+      logger.info(chalk.yellow(`[watch] Change detected in ${filePath}. Sending to SuperDocs...`));
 
       const spinner = logger.spinner("Processing change");
       const exportedBytes = await executeSingleEditCycle(
@@ -85,16 +63,11 @@ export async function runWatchMode(
         prompt,
         logger,
         spinner,
-        signal
+        signal,
+        gitContext
       );
 
-      if (exportedBytes) {
-        lastProcessedHash = computeBufferHash(exportedBytes);
-      } else {
-        const writtenBytes = await fs.readFile(outputPath);
-        lastProcessedHash = computeBufferHash(writtenBytes);
-      }
-
+      await recordProcessed(exportedBytes);
       logger.info(chalk.green(`[watch] Edit complete. Updated ${outputPath}`));
     } catch (error) {
       logger.error(formatFriendlyError(error), formatFriendlyHint(error));
@@ -107,6 +80,9 @@ export async function runWatchMode(
     }
   };
 
+  // The watcher is registered before the first edit runs. Registering it
+  // afterwards left a window in which edits made during that first pass were
+  // lost until the next unrelated save.
   const watcher = watchFile({
     filePath,
     debounceMs,
@@ -116,19 +92,68 @@ export async function runWatchMode(
     }
   });
 
+  logger.info(chalk.blue(`[watch] Starting initial edit for ${filePath}...`));
+
+  const initialSpinner = logger.spinner("Preparing edit");
+  try {
+    const exportedBytes = await executeSingleEditCycle(
+      filePath,
+      options,
+      command,
+      prompt,
+      logger,
+      initialSpinner,
+      signal,
+      gitContext
+    );
+    await recordProcessed(exportedBytes);
+  } catch (error) {
+    if (initialSpinner.isSpinning) {
+      initialSpinner.fail("Initial edit failed");
+    }
+    logger.error(formatFriendlyError(error), formatFriendlyHint(error));
+  }
+
+  logger.info(
+    chalk.blue(
+      `[watch] Watching ${filePath} for changes (debounce: ${debounceMs}ms)... (Press Ctrl+C to exit)`
+    )
+  );
+
+  ready = true;
+  // Drain anything that landed during the initial pass. The hash check makes
+  // this a no-op when the only writer was the initial edit itself.
+  if (!signal?.aborted) {
+    pendingChange = false;
+    void processChange();
+  }
+
+  // Interrupt handling belongs to the caller (`edit.ts`), which owns the single
+  // AbortController for the command. Registering SIGINT/SIGTERM here as well
+  // leaked one listener pair per run and raced with the in-flight edit's lock.
   return new Promise<void>((resolve) => {
+    let closed = false;
     const cleanup = () => {
-      logger.info(chalk.gray("\n[watch] Stopping file watcher..."));
+      if (closed) {
+        return;
+      }
+      closed = true;
+      logger.info(chalk.gray("[watch] Stopping file watcher..."));
       watcher.close();
       resolve();
     };
 
-    if (signal) {
-      signal.addEventListener("abort", cleanup, { once: true });
+    if (!signal) {
+      cleanup();
+      return;
     }
 
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
+    if (signal.aborted) {
+      cleanup();
+      return;
+    }
+
+    signal.addEventListener("abort", cleanup, { once: true });
   });
 }
 
