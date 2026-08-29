@@ -64,7 +64,7 @@ jobs:
 
       - name: Publish
         if: github.ref_type == 'tag'
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --loglevel verbose
 
       # A git tag is not a GitHub Release. Publishing to npm alone left the
       # Releases page showing an older version, so create the Release here,
