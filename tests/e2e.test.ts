@@ -395,6 +395,27 @@ describe("e2e: edit", () => {
     assert.match(result.stderr, /Dry run active/u);
   });
 
+  it("keeps the --dry-run diff plain when stdout is redirected and FORCE_COLOR is set", async () => {
+    const api = await server();
+    const home = await makeHome();
+    const doc = await withDoc(home);
+
+    // chalk honours FORCE_COLOR over NO_COLOR, and npm exports FORCE_COLOR to
+    // lifecycle scripts running under a terminal. That combination put ANSI
+    // escapes on redirected stdout during `npm publish`, while CI -- which
+    // never sets FORCE_COLOR -- stayed green. Pin the hostile case so the
+    // payload cannot regress to coloured output again.
+    const result = await runCli(["edit", doc, "-p", "Tighten", "--dry-run"], {
+      home,
+      env: { ...authEnv(api), FORCE_COLOR: "1" }
+    });
+
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /^--- /mu);
+    // eslint-disable-next-line no-control-regex
+    assert.doesNotMatch(result.stdout, /\[/u, "the diff payload must stay machine-safe");
+  });
+
   it("reports no changes when the export matches the input", async () => {
     const api = await server({ exportBody: Buffer.from(ORIGINAL, "utf8") });
     const home = await makeHome();

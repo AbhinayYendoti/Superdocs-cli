@@ -172,7 +172,15 @@ export async function executeSingleEditCycle(
       spinner.stop();
       const originalText = input.bytes.toString("utf8");
       const editedText = new TextDecoder().decode(exported);
-      const diff = generateUnifiedDiff(originalText, editedText, { filename: input.filename });
+      // The diff is the stdout payload, so its colouring must follow the
+      // destination stream, not chalk's ambient detection. chalk honours
+      // FORCE_COLOR over NO_COLOR, and npm exports FORCE_COLOR to lifecycle
+      // scripts running under a terminal, which leaked escape codes into
+      // redirected output. Anything piped or written to a file stays plain.
+      const diff = generateUnifiedDiff(originalText, editedText, {
+        filename: input.filename,
+        color: process.stdout.isTTY === true
+      });
 
       if (logger.json) {
         logger.writeJson({
