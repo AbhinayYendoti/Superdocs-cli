@@ -41,6 +41,11 @@ Correctness and hygiene release. No new commands.
 - A missing or empty `--prompt` and invalid numeric options exited with the generic code `1`
   instead of the documented usage code `2`. A new `UsageError` maps caller mistakes to `2`
   consistently.
+- `--dry-run` emitted ANSI colour codes into redirected output, so a diff piped to a file or
+  another program was not machine-safe. The diff is the `stdout` payload, but its colouring
+  followed `chalk`'s ambient detection rather than the destination stream, and `chalk` honours
+  `FORCE_COLOR` over `NO_COLOR`. Colour now depends on whether `stdout` is a terminal;
+  `--no-color` and `NO_COLOR` are unaffected.
 
 ### Added
 
